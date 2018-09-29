@@ -14,7 +14,7 @@ The scripts were created using the Spyder IDE of anaconda. Before executing each
 Within the **DataGenerator** folder are two Python scripts that create the dataset.
 It is assumed that a top-level folder exists called TIMIT_WAV that contains the TIMIT dataset. The top-level folder should look something like this:
 
-![alt text](https://github.com/simonsuthers/Speech-Separation/tree/master/Speech-Separation/Pictures/FolderStructure.png "Mixture signals")
+![alt text](https://github.com/simonsuthers/Speech-Separation/blob/master/Pictures/FolderStructure.png "Mixture signals")
 
 ### datagenerator.py
 The **datagenerator.py** script contains a class to create the data set. The dataset is saved as several pickle files. Each pickle file contains 
