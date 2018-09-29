@@ -29,14 +29,15 @@ The feedforward folder contains a python script called **train_net.py** that tra
 The output layer uses a sigmoid activation function. A mean squared error loss function is used.
 After 50 epochs, the network struggles to find any pattern in the data. The accuracy after 50 epochs is still close to 50%.
 
-![alt text](https://github.com/simonsuthers/Speech-Separation/tree/master/Speech-Separation/SpeechSegregation/feedforwardaccuracy.png "Feedforward accuracy")
+![Alt text](Speech-Separation/Feedforward/feedforwardaccuracy.png?raw=true "Feedforward accuracy")
 
 A test signal containing mixture of 2 voices was fed into the network and the following IBM was produced:
-![alt text](https://github.com/simonsuthers/Speech-Separation/tree/master/Speech-Separation/SpeechSegregation/feedforwardibm.png "Feedforward ibm")
+
+![Alt text](Speech-Separation/Feedforward/feedforwardibm.png?raw=true "Feedforward IBM")
 
 After applying the IBM, the original sound wave looks (and sounds) the same as the original sound wave, implying that a feed forward network is not a good model for speech separation.
 
-![alt text](https://github.com/simonsuthers/Speech-Separation/tree/master/Speech-Separation/SpeechSegregation/feedforwardrecoveredwav.png "Feedforward recovered sound wave")
+![Alt text](Speech-Separation/Feedforward/feedforwardrecoveredwav.png?raw=true "Feedforward recovered sound wave")
 
 ## RNN network
 ### train_RNN.py
