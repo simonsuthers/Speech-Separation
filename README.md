@@ -1,4 +1,4 @@
-Speech Separation using Neural Networks and Tensorflow.
+# Speech Separation using Neural Networks and Tensorflow.
 
 ## Introduction
 
@@ -19,26 +19,26 @@ It is assumed that a top-level folder exists called TIMIT_WAV that contains the 
 ### datagenerator.py
 The **datagenerator.py** script contains a class to create the data set. The dataset is saved as several pickle files. Each pickle file contains 
 The pickle files are saved to a top level folder called **Data**.
-###datagenerator2.py
+### datagenerator2.py
 The **datagenerator2.py** takes the data from a given number of pickle files and feeds data into tensorflow session in batches. 
 
 ## Feed Forward network
-
 ### train_net.py
 
 The feedforward folder contains a python script called **train_net.py** that trains a feedforward network. The network contains 2 hidden layers of 300 neurons and an output layer of 129 neurons (one for each frequency bin in the spectrogram). 
 The output layer uses a sigmoid activation function. A mean squared error loss function is used.
-After 50 epochs, the network struggles to find any pattern in the data. The accuracy after 50 epochs is still close to 50%
+After 50 epochs, the network struggles to find any pattern in the data. The accuracy after 50 epochs is still close to 50%.
+
 ![alt text](https://github.com/simonsuthers/Speech-Separation/tree/master/Speech-Separation/SpeechSegregation/feedforwardaccuracy.png "Feedforward accuracy")
 
 A test signal containing mixture of 2 voices was fed into the network and the following IBM was produced:
 ![alt text](https://github.com/simonsuthers/Speech-Separation/tree/master/Speech-Separation/SpeechSegregation/feedforwardibm.png "Feedforward ibm")
 
 After applying the IBM, the original sound wave looks (and sounds) the same as the original sound wave, implying that a feed forward network is not a good model for speech separation.
+
 ![alt text](https://github.com/simonsuthers/Speech-Separation/tree/master/Speech-Separation/SpeechSegregation/feedforwardrecoveredwav.png "Feedforward recovered sound wave")
 
 ## RNN network
-
 ### train_RNN.py
 
 The RNN folder contains a python script called **train_rnn.py**. This scripts trains a 2 layer RNN using LSTM cells containing 300 neurons. A final feedforward layer with 129 neurons using a sigmoid activation function produces an IBM. A mean squared error loss function was used.
@@ -51,6 +51,7 @@ Like the feed forward network, the network struggles to separate the two sound s
 As with the feed forward network, a test signal containing mixture of 2 voices was fed into the network and the following IBM was produced:
 
 ![alt text](https://github.com/simonsuthers/Speech-Separation/tree/master/Speech-Separation/SpeechSegregation/rnnibm.png "RNN ibm")
+
 As with the feed forward network, after applying the IBM, the original sound wave looks (and sounds) the same as the original sound wave, implying that a feed forward network is not a good model for speech separation.
 
 ![alt text](https://github.com/simonsuthers/Speech-Separation/tree/master/Speech-Separation/SpeechSegregation/ rnnrecoveredwav.png "RNN recovered sound wave")
