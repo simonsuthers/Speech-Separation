@@ -26,7 +26,10 @@ The **datagenerator2.py** takes the data from a given number of pickle files and
 ### train_net.py
 
 The feedforward folder contains a python script called **train_net.py** that trains a feedforward network. The network contains 2 hidden layers of 300 neurons and an output layer of 129 neurons (one for each frequency bin in the spectrogram). 
-The output layer uses a sigmoid activation function. A mean squared error loss function is used.
+The output layer uses a sigmoid activation function. A mean squared error loss function is used on a known IBM. The following schematic represents the flow of code:
+
+![Alt text](Pictures/Feed_forward.png?raw=true "Feedforward flow")
+
 After 50 epochs, the network struggles to find any pattern in the data. The accuracy after 50 epochs is still close to 50%.
 
 ![Alt text](Feedforward/feedforwardaccuracy.png?raw=true "Feedforward accuracy")
@@ -42,7 +45,9 @@ After applying the IBM, the original sound wave looks (and sounds) the same as t
 ## RNN network
 ### train_RNN.py
 
-The RNN folder contains a python script called **train_rnn.py**. This scripts trains a 2 layer RNN using LSTM cells containing 300 neurons. A final feedforward layer with 129 neurons using a sigmoid activation function produces an IBM. A mean squared error loss function was used.
+The RNN folder contains a python script called **train_rnn.py**. This scripts trains a 2 layer RNN using LSTM cells containing 300 neurons. A final feedforward layer with 129 neurons using a sigmoid activation function produces an IBM. A mean squared error loss function was used against a known IBM. The flow is shown in the following schematic:
+
+![Alt text](Pictures/RNN.png?raw=true "RNN flow")
 
 The network uses the same **datagenerator.py** class to create the data. The spectrograms are split into chunks of 100 time frequency bins which are fed into the RNN. The remainder data in a spectrogram after the nearest value of 100 is not used for training. 
 Like the feed forward network, the network struggles to separate the two sound sources. Accuracy on the training set after 50 epochs is still almost 50%.
@@ -53,8 +58,34 @@ As with the feed forward network, a test signal containing mixture of 2 voices w
 
 ![Alt text](RNN/rnnibm.png?raw=true "RNN IBM")
 
-As with the feed forward network, after applying the IBM, the original sound wave looks (and sounds) the same as the original sound wave, implying that a feed forward network is not a good model for speech separation.
+As with the feed forward network, after applying the IBM, the original sound wave looks (and sounds) the same as the original sound wave, implying that a RNN network is not a good model for speech separation.
 
 ![Alt text](RNN/rnnrecoveredwav.png?raw=true "RNN recovered sound wave")
 
+## Bi-directional RNN network
+### train_bi_directional_RNN.py
 
+The Bi-Directional-RNN folder contains a python script called **train_bi_directional_RNN.py**. This scripts trains a 2 layer bi-directional RNN using LSTM cells containing 300 neurons. A final feedforward layer with 129 neurons using a sigmoid activation function produces an IBM. A mean squared error loss function was used against a known IBM. The flow is shown in the following schematic:
+
+![Alt text](Pictures/Bi-directional-RNN.png?raw=true "Bi-directional RNN flow")
+
+As with the one-directional RNN, the network uses the same **datagenerator.py** class to create the data. The spectrograms are split into chunks of 100 time frequency bins which are fed into the RNN. The remainder data in a spectrogram after the nearest value of 100 is not used for training. 
+Accuracy on the training set after 50 epochs is still only 50%.
+
+![Alt text](Bi-Directional-RNN/bidirnnaccuracy.png?raw=true "Bi-directional RNN accuracy")
+
+The same test signal containing mixture of 2 voices was fed into the network and the following IBM was produced:
+
+![Alt text](Bi-Directional-RNN/bidirnnibm.png?raw=true "Bi-directional RNN IBM")
+
+As with the other networks, after applying the IBM, the original sound wave looks (and sounds) the same as the original sound wave, implying that a bi-directional RNN network on its own is not a good model for speech separation.
+
+![Alt text](Bi-Directional-RNN/bidirnnrecoveredwav.png?raw=true " Bi-directional RNN recovered sound wave")
+
+## Bi-directional RNN network with deep clustering loss function
+### none
+Not implemented yet
+
+## Full deep clustering model with k-means clustering
+### none
+Not implemented yet
