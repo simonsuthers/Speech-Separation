@@ -82,10 +82,28 @@ As with the other networks, after applying the IBM, the original sound wave look
 
 ![Alt text](Bi-Directional-RNN/bidirnnrecoveredwav.png?raw=true " Bi-directional RNN recovered sound wave")
 
+
 ## Bi-directional RNN network with deep clustering loss function
-### none
-Not implemented yet
+### train_bi_with_loss_function.py
+
+The Bi-Directional-RNN-with-loss-function folder contains a python script called **train_bi_with_loss_function.py**. This scripts trains the same 2 layer bi-directional RNN as before. This time, the loss function from deep clustering was implemented. The flow is shown in the following schematic:
+
+![Alt text](Pictures/Bi-directional-RNN-with-loss-function.png?raw=true "Bi-directional RNN with loss function flow")
+
+Accuracy on the training set after 50 epochs was erratic. However, the purpose of the loss function is to move neurons in the final layer apart.
+
+![Alt text](Bi-Directional-RNN-with-loss-function/bidilossaccuracy.png?raw=true "Bi-directional RNN with loss function accuracy")
+
+The same test signal containing mixture of 2 voices was fed into the network and the following IBM was produced:
+
+![Alt text](Bi-Directional-RNN-with-loss-function/bidilossibm.png?raw=true "Bi-directional RNN with loss function IBM")
+
+As with the other networks, after applying the IBM, the original sound wave looks (and sounds) the same as the original sound wave, implying that a bi-directional RNN network on its own is not a good model for speech separation.
+
+![Alt text](Bi-Directional-RNN-with-loss-function/bidilossrecoveredwav.png?raw=true " Bi-directional RNN with loss function recovered sound wave")
 
 ## Full deep clustering model with k-means clustering
 ### none
 Not implemented yet
+
+
