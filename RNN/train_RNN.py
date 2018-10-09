@@ -85,23 +85,24 @@ with tf.variable_scope('BLSTM1') as scope:
     lstm_fw_cell1 = tf.contrib.rnn.BasicLSTMCell(n_neurons_in_h1)
       
     #Create first layer
+    #Produces a 300x100 output layer
     outputs1, states1 = tf.nn.dynamic_rnn(cell=lstm_fw_cell1, inputs=X, dtype=tf.float32)
-    state_concate1 = tf.concat(outputs1, 2)
 
 #%% Layer 2
 with tf.variable_scope('BLSTM2') as scope: 
     lstm_fw_cell2 = tf.contrib.rnn.BasicLSTMCell(n_neurons_in_h2)
       
     #Create first layer
-    outputs2, states2 = tf.nn.dynamic_rnn(cell=lstm_fw_cell2, inputs=state_concate1, dtype=tf.float32)
-    state_concate2 = tf.concat(outputs2, 2)
-    out_concate = tf.reshape(state_concate2, [-1, n_neurons_in_h2])
+    #Produces a 300x100 output layer
+    outputs2, states2 = tf.nn.dynamic_rnn(cell=lstm_fw_cell2, inputs=outputs1, dtype=tf.float32)
+    #Produces a 6400x300 output layer
+    out_concate = tf.reshape(outputs2, [-1, n_neurons_in_h2])
 
 #%% ouput layer
 
 W0 = tf.Variable(tf.random_normal([n_neurons_in_h2, n_classes], mean=0, stddev=1/np.sqrt(n_features)), name="weightsOut")
 b0 = tf.Variable(tf.random_normal([n_classes], mean=0, stddev=1/np.sqrt(n_features)), name="biasesOut")
-#Activation function (tanh)
+#Activation function (sigmoid)
 a = tf.nn.sigmoid((tf.matmul(out_concate, W0)+b0), name="activationOutputLayer")
 
 #%% Cost function
@@ -252,49 +253,19 @@ data_generator = DataGenerator()
 #Get spectrogram of two wav files combined
 testdata = data_generator.CreateTrainingDataSpectrogram(wavfile1, wavfile2, sampling_rate, frame_size, maxFFTSize, vad_threshold)
 
-#%% As a test - convert spectrogram back into time domain
-import matplotlib.pyplot as plt
-
-#Get spectrogram from testing routine
-testspectrogram1 = np.power(10, testdata['Sample'])
-
-#Get recovered mixture from istft routine
-wav_recovered = data_generator.istft(testspectrogram1, sampling_rate, frame_size)
-   
-#Amplify wav file
-wav_recovered = wav_recovered * 5
-
-#See wav file
-plt.figure(1)
-
-#sub plot 1 - Original signal
-ax1 = plt.subplot(211)
-plt.plot(testdata['MixtureSignal'])
-plt.xlabel('time')
-plt.title('original signal')
-
-#sub plot 2 - Recovered signal
-ax2 = plt.subplot(212, sharex=ax1)
-plt.plot(wav_recovered)
-plt.xlabel('time')
-plt.title('recovered signal')
-
-plt.show() 
-
-#%% remove unused variables
-
-del testspectrogram1, wav_recovered
-
 #%% Create ibm from model
 
+# Get only active test features
+ts_features = testdata['Sample'][testdata['VAD']]
+
 #Get number of features variable
-n_features = np.shape(testdata['Sample'])[1]
+n_features = np.shape(ts_features)[1]
   
 #Previously saved model 
 model_checkpoint = "./model.chkpt"
 
 #Create array for storing IBM
-ibm = []
+ibm_list = []
 
 #create saver to save session
 saver = tf.train.Saver()
@@ -305,7 +276,7 @@ with tf.Session() as sess:
     saver.restore(sess, model_checkpoint)
         
     #get length of spectrogram for mixture signal
-    len_spec = testdata['Sample'].shape[0]
+    len_spec = ts_features.shape[0]
     k = 0
     
     #loop through spectrograms creating chunks of (frames_per_sample) time periods 
@@ -314,30 +285,30 @@ with tf.Session() as sess:
         #if have come to the end of the spectrogram, need to pad the rest of the spectrogram with 0s to get a 129x209 array
         if (k + frames_per_sample > len_spec):
             # Get remaining data
-            ts_features = testdata['Sample'][k:k + frames_per_sample, :]
+            x = ts_features[k:k + frames_per_sample, :]
             
             # get shape of current ts_features
-            current_len_spec = ts_features.shape[0]
+            current_len_spec = x.shape[0]
             
             # Pad ts_features so that it is the full size
-            ts_features = np.pad(ts_features, ((0, (frames_per_sample-current_len_spec)), (0, 0)), 'constant', constant_values=(0))
+            x = np.pad(x, ((0, (frames_per_sample-current_len_spec)), (0, 0)), 'constant', constant_values=(0))
             
             # reshape spectrogram for neural network
-            ts_features = np.reshape(ts_features, [1, frames_per_sample, n_features])
+            x = np.reshape(x, [1, frames_per_sample, n_features])
 
         else:
             # Get data
-            ts_features = np.reshape(testdata['Sample'][k:k + frames_per_sample, :], [1, frames_per_sample, n_features])
+            x = np.reshape(ts_features[k:k + frames_per_sample, :], [1, frames_per_sample, n_features])
                 
         # get inferred ibm using trained model
-        ibm_batch = sess.run([a], feed_dict={X: ts_features})
+        ibm_batch = sess.run([a], feed_dict={X: x})
         
         # append ibm from batch to previous ibms
         # if have come to the end of the spectrogram, only append relevant points and not padded points
         if (k + frames_per_sample > len_spec):
-            ibm.append(ibm_batch[0][0:current_len_spec,:])
+            ibm_list.append(ibm_batch[0][0:current_len_spec,:])
         else:
-            ibm.append(ibm_batch[0])
+            ibm_list.append(ibm_batch[0])
         
         #increment k to look at next n time points
         k = k + frames_per_sample
@@ -345,12 +316,20 @@ with tf.Session() as sess:
 
  
 #Convert list to array       
-ibm = np.concatenate([item for item in ibm], axis=0)
+ibm_array = np.concatenate([item for item in ibm_list], axis=0)
 
 #Round each point to 0 or 1
-ibm = (np.round(ibm, 0)).astype(int)
+ibm_array = (np.round(ibm_array, 0)).astype(int)
+
+#Add extra points to IBM where VAD is 0
+#Get index of all time points that have 0 activity
+vad = np.where(testdata['VAD'] == False)[0]
+#take index away from index points
+vad1 = np.subtract(vad, np.asarray(range(vad.shape[0])))
+#Use insert to insert extra columns into ibm where VAD is 0
+ibm = np.insert(ibm_array, vad1, 0, axis=0)
         
-del k, n_features, len_spec, current_len_spec
+del k, n_features, len_spec, current_len_spec, ibm_array
 
 #%% Show original mixture spectrogram and mask
 
@@ -391,7 +370,7 @@ wav_recovered = np.float32(wav_recovered * 5)
 
 #%% plot signal 
 
-plt.figure(2)
+fig = plt.figure() 
 
 #sub plot 1 - Original signal
 ax1 = plt.subplot(211)
