@@ -100,18 +100,14 @@ class DataGenerator(object):
         
         # compute log stft spectrum for mixture of both speaker
         speech_mix_spec0, f1, t1 = self.stft(speech_mix, sampling_rate, frame_size)
-        speech_mix_spec1 = speech_mix_spec0[:, :maxFFTSize]
+        speech_mix_spec1 = np.abs(speech_mix_spec0[:, :maxFFTSize])
         # Get additional frequency spectrum for mixture signal
-        speech_mix_spec = np.abs(speech_mix_spec1)
-        speech_mix_spec = np.log10(speech_mix_spec)
+        speech_mix_spec = np.log10(speech_mix_spec1)
         #Convert speech_mix_spec to float16 to save on memory
         speech_mix_spec = speech_mix_spec.astype('float16')
-        
-        #Get maximum magnitude of mixture signal
-        max_mag = np.max(speech_mix_spec1)
-        
+               
         # VAD is voice activity detection. If magnitude is greater than threshold then a voice is active.
-        speech_VAD = (speech_mix_spec1 > (max_mag - vad_threshold)).astype(int)
+        speech_VAD = (speech_mix_spec1.sum(axis=1) > 0.005).astype(int)
         #Convert VAD to boolean
         speech_VAD = speech_VAD.astype(bool)
         
@@ -166,17 +162,26 @@ class DataGenerator(object):
             #Create sample dictionary
             sample = self.CreateTrainingDataSpectrogram(i, j, sampling_rate, frame_size, maxFFTSize, vad_threshold)  
             
+            #reduce spectrogram to only include bins with activity greater than threshold
+            train = sample['Sample'][sample['VAD']]
+            Y = sample['Target'][sample['VAD']]
+            
             #get length of spectrogram for mixture signal
-            len_spec = sample['Sample'].shape[0]
+            len_spec = train.shape[0]
             k = 0
+            vad_start = 0
     
             #loop through spectrograms creating chunks of (frames_per_sample) time periods 
             while(k + frames_per_sample < len_spec):
                 #Get first chunk of data from spectrogram of 3 signals
                 #Chunk splits the spectrogram into a series of n (FRAMES_PER_SAMPLE) points
-                speech_mix_spec = sample['Sample'][k:k + frames_per_sample, :]
-                speech_VAD = sample['VAD'][k:k + frames_per_sample, :]
-                Y1 = sample['Target'][k:k + frames_per_sample, :]
+                speech_mix_spec = train[k:k + frames_per_sample, :]
+                Y1 = Y[k:k + frames_per_sample, :]
+                
+                #Get VAD values for all points to k
+                vad_end = np.where(sample['VAD'] == True)[0][k + frames_per_sample]
+                speech_VAD = sample['VAD'][vad_start:vad_end]
+                vad_start = vad_end
                 
                 #Create feed_dict for neural network
                 sample_dict = {'Sample': speech_mix_spec, 'VAD': speech_VAD, 'Target': Y1, 'Wavfiles': sample['Wavfiles'], 'Id':id }
@@ -218,6 +223,8 @@ class DataGenerator(object):
 from os import chdir, getcwd
 wd=getcwd()
 chdir(wd)
+
+del wd
 
 #%% Test stft and isft function
 
@@ -263,6 +270,7 @@ del data_dir, n_speaker, speaker_file, data_generator
 
 #%% Test create CreateTrainingDataSpectrogram function
 #Create Spectrogram
+
   
 frame_size = 256
 maxFFTSize = 129
@@ -349,7 +357,7 @@ frames_per_sample = 100
 # create instance of class
 data_generator = DataGenerator() 
 
-#Run CreatePickleFiles function
+# Run CreatePickleFiles function
 #data_generator.CreatePickleFiles(filename, data_dir, sampling_rate, maxFFTSize, frame_size, vad_threshold, frames_per_sample)
 
 #%% Clear variables
