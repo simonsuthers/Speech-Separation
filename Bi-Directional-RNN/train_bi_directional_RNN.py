@@ -18,7 +18,7 @@ sys.path.append('../Datagenerator')
 from datagenerator2 import DataGenerator2
 
 #list of training data files   
-pkl_list = ['../Data/train' + str(i) + '.pkl' for i in range(1, 2)]
+pkl_list = ['../Data/train' + str(i) + '.pkl' for i in range(1, 3)]
 
 # generator for training set and validation set
 data_generator = DataGenerator2(pkl_list)
@@ -258,49 +258,20 @@ data_generator = DataGenerator()
 #Get spectrogram of two wav files combined
 testdata = data_generator.CreateTrainingDataSpectrogram(wavfile1, wavfile2, sampling_rate, frame_size, maxFFTSize, vad_threshold)
 
-#%% As a test - convert spectrogram back into time domain
-import matplotlib.pyplot as plt
-
-#Get spectrogram from testing routine
-testspectrogram1 = np.power(10, testdata['Sample'])
-
-#Get recovered mixture from istft routine
-wav_recovered = data_generator.istft(testspectrogram1, sampling_rate, frame_size)
-   
-#Amplify wav file
-wav_recovered = wav_recovered * 5
-
-#See wav file
-plt.figure(1)
-
-#sub plot 1 - Original signal
-ax1 = plt.subplot(211)
-plt.plot(testdata['MixtureSignal'])
-plt.xlabel('time')
-plt.title('original signal')
-
-#sub plot 2 - Recovered signal
-ax2 = plt.subplot(212, sharex=ax1)
-plt.plot(wav_recovered)
-plt.xlabel('time')
-plt.title('recovered signal')
-
-plt.show() 
-
-#%% remove unused variables
-
-del testspectrogram1, wav_recovered
 
 #%% Create ibm from model
 
+# Get only active test features
+ts_features = testdata['Sample'][testdata['VAD']]
+
 #Get number of features variable
-n_features = np.shape(testdata['Sample'])[1]
+n_features = np.shape(ts_features)[1]
   
 #Previously saved model 
 model_checkpoint = "./model.chkpt"
 
 #Create array for storing IBM
-ibm = []
+ibm_list = []
 
 #create saver to save session
 saver = tf.train.Saver()
@@ -311,7 +282,7 @@ with tf.Session() as sess:
     saver.restore(sess, model_checkpoint)
         
     #get length of spectrogram for mixture signal
-    len_spec = testdata['Sample'].shape[0]
+    len_spec = ts_features.shape[0]
     k = 0
     
     #loop through spectrograms creating chunks of (frames_per_sample) time periods 
@@ -320,30 +291,30 @@ with tf.Session() as sess:
         #if have come to the end of the spectrogram, need to pad the rest of the spectrogram with 0s to get a 129x209 array
         if (k + frames_per_sample > len_spec):
             # Get remaining data
-            ts_features = testdata['Sample'][k:k + frames_per_sample, :]
+            x = ts_features[k:k + frames_per_sample, :]
             
             # get shape of current ts_features
-            current_len_spec = ts_features.shape[0]
+            current_len_spec = x.shape[0]
             
             # Pad ts_features so that it is the full size
-            ts_features = np.pad(ts_features, ((0, (frames_per_sample-current_len_spec)), (0, 0)), 'constant', constant_values=(0))
+            x = np.pad(x, ((0, (frames_per_sample-current_len_spec)), (0, 0)), 'constant', constant_values=(0))
             
             # reshape spectrogram for neural network
-            ts_features = np.reshape(ts_features, [1, frames_per_sample, n_features])
+            x = np.reshape(x, [1, frames_per_sample, n_features])
 
         else:
             # Get data
-            ts_features = np.reshape(testdata['Sample'][k:k + frames_per_sample, :], [1, frames_per_sample, n_features])
+            x = np.reshape(ts_features[k:k + frames_per_sample, :], [1, frames_per_sample, n_features])
                 
         # get inferred ibm using trained model
-        ibm_batch = sess.run([a], feed_dict={X: ts_features})
+        ibm_batch = sess.run([a], feed_dict={X: x})
         
         # append ibm from batch to previous ibms
         # if have come to the end of the spectrogram, only append relevant points and not padded points
         if (k + frames_per_sample > len_spec):
-            ibm.append(ibm_batch[0][0:current_len_spec,:])
+            ibm_list.append(ibm_batch[0][0:current_len_spec,:])
         else:
-            ibm.append(ibm_batch[0])
+            ibm_list.append(ibm_batch[0])
         
         #increment k to look at next n time points
         k = k + frames_per_sample
@@ -351,12 +322,20 @@ with tf.Session() as sess:
 
  
 #Convert list to array       
-ibm = np.concatenate([item for item in ibm], axis=0)
+ibm_array = np.concatenate([item for item in ibm_list], axis=0)
 
 #Round each point to 0 or 1
-ibm = (np.round(ibm, 0)).astype(int)
+ibm_array = (np.round(ibm_array, 0)).astype(int)
+
+#Add extra points to IBM where VAD is 0
+#Get index of all time points that have 0 activity
+vad = np.where(testdata['VAD'] == False)[0]
+#take index away from index points
+vad1 = np.subtract(vad, np.asarray(range(vad.shape[0])))
+#Use insert to insert extra columns into ibm where VAD is 0
+ibm = np.insert(ibm_array, vad1, 0, axis=0)
         
-del k, n_features, len_spec, current_len_spec
+del k, n_features, len_spec, current_len_spec, ibm_array, ibm_list
 
 #%% Show original mixture spectrogram and mask
 
