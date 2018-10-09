@@ -16,7 +16,7 @@ sys.path.append('../Datagenerator')
 from datagenerator2 import DataGenerator2
 
 #list of training data files   
-pkl_list = ['../Data/train' + str(i) + '.pkl' for i in range(1, 2)]
+pkl_list = ['../Data/train' + str(i) + '.pkl' for i in range(1, 3)]
 
 # generator for training set and validation set
 data_generator = DataGenerator2(pkl_list)
@@ -77,8 +77,6 @@ X = tf.placeholder(tf.float32, shape=[None, frames_per_sample, n_features], name
 #Y = tf.placeholder(tf.float32, shape=[(batch_size * frames_per_sample), n_classes], name="labels")
 Y = tf.placeholder(tf.float32, shape=[(batch_size * frames_per_sample), n_classes, 2], name="labels")
 
-VAD = tf.placeholder(tf.float32, shape=[None, frames_per_sample, n_features], name="VAD")
-
 #%% Layer 1
 
 #Create lstm cell with n hidden neurons
@@ -121,34 +119,19 @@ a = tf.nn.sigmoid((tf.matmul(out_concate, W0)+b0), name="activationOutputLayer")
 reshaped_emb = tf.reshape(a, [-1, n_classes, embedding_dimension])
 
 # normalization before output
+# 6400 x 129 x 1
 normalized_emb = tf.nn.l2_normalize(reshaped_emb, 2)
 
 #%% Define Loss function
 
-# array with all outputs in a row
-# 825,600 (6400 * 129) x 1
-embedding_rs = tf.reshape(normalized_emb, shape=[-1, embedding_dimension])
-
-# array with all VAD outputs in a row
-# 825,600 (6400 * 129) x 1 array
-VAD_rs = tf.reshape(VAD, shape=[-1])
-
-# get only the embeddings with active VAD
-# Multiply embeddings by VAD array
-# returns # 825,600 (6400 * 129) x 1 array
-embedding_rsv = tf.transpose(tf.multiply(tf.transpose(embedding_rs), VAD_rs))
 #Reshape output array to (n_features * frames_per_sample) x (number of dimensions) array
 #returns a 64 x 12900 x 1 array
-embedding_v = tf.reshape(embedding_rsv, [-1, frames_per_sample * n_features, embedding_dimension])
- 
-# get the Y(speaker indicator function) with active VAD
-# reshape Y to 825,600 (64 * 129 * 100) x 2 (number of speakers)
-Y_rs = tf.reshape(Y, shape=[-1, 2])
-# Multiply Y by VAD array to get only Y with active voice
-Y_rsv = tf.transpose(tf.multiply(tf.transpose(Y_rs), VAD_rs))
+embedding_v = tf.reshape(normalized_emb, shape=[-1, frames_per_sample * n_features, embedding_dimension])
+
+# get the Y(speaker indicator function)
 #Reshape output array to (n_features * frames_per_sample) x (number of dimensions) array
 #returns a 64 x 12900 x 2 array
-Y_v = tf.reshape(Y_rsv, shape=[-1, frames_per_sample * n_features, 2])
+Y_v = tf.reshape(Y, shape=[-1, frames_per_sample * n_features, 2])
 
 # =============================================================================
 # fast computation format of the embedding loss function
@@ -191,6 +174,8 @@ train_step = optimizer.apply_gradients(gradients_and_vars)
 correct_prediction = tf.equal(tf.round(a), Y2_v1)
 #Accuracy determination
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32), name="Accuracy")
+
+
 
 
 #%% Run model
@@ -240,15 +225,9 @@ with tf.Session() as sess:
             tr_features = np.concatenate([np.reshape(item['Sample'], [1, frames_per_sample, n_features]) for item in data])
             
             # concatenate VAD arrays together to get (64, 100, 129) array
-            VAD_reshaped = (np.concatenate([np.reshape(item['VAD'], [1, frames_per_sample, n_features]) for item in data])).astype('int')
-            
-            # concatenate labels together to get (64, 100, 129) array
-            #Y_labels = (np.concatenate([np.reshape(np.asarray(item['Target'])[:,:,0], [1, frames_per_sample, n_features]) for item in data], axis=0)).astype(int)
-            #Y_labels = (np.concatenate([np.asarray(item['Target'])[:,:,0] for item in data], axis=0)).astype(int)
-            
             Y_labels = (np.concatenate([np.asarray(item['Target']) for item in data])).astype('int')
             
-            _, loss1, accuracy1, loss_batch_Y1_1, loss_batch_Y2_1 = sess.run([train_step, loss_batch, accuracy, loss_batch_Y1, loss_batch_Y2], feed_dict={X: tr_features, Y:Y_labels, VAD: VAD_reshaped})
+            _, loss1, accuracy1 = sess.run([train_step, loss_batch, accuracy], feed_dict={X: tr_features, Y:Y_labels})
             #Add loss and accuracy to intermediate array
             intermediate_loss.append(loss1)
             intermediate_accuracy.append(accuracy1)
@@ -272,6 +251,7 @@ end = time.time()
 print("Time elapsed (secs): %f"%(end - start))
 
 del start, end
+
     
 #%% remove variables
     
@@ -338,14 +318,17 @@ testdata = data_generator.CreateTrainingDataSpectrogram(wavfile1, wavfile2, samp
 
 #%% Create ibm from model
 
+# Get only active test features
+ts_features = testdata['Sample'][testdata['VAD']]
+
 #Get number of features variable
-n_features = np.shape(testdata['Sample'])[1]
+n_features = np.shape(ts_features)[1]
   
 #Previously saved model 
 model_checkpoint = "./model.chkpt"
 
 #Create array for storing IBM
-ibm = []
+ibm_list = []
 
 #create saver to save session
 saver = tf.train.Saver()
@@ -356,7 +339,7 @@ with tf.Session() as sess:
     saver.restore(sess, model_checkpoint)
         
     #get length of spectrogram for mixture signal
-    len_spec = testdata['Sample'].shape[0]
+    len_spec = ts_features.shape[0]
     k = 0
     
     #loop through spectrograms creating chunks of (frames_per_sample) time periods 
@@ -365,30 +348,30 @@ with tf.Session() as sess:
         #if have come to the end of the spectrogram, need to pad the rest of the spectrogram with 0s to get a 129x209 array
         if (k + frames_per_sample > len_spec):
             # Get remaining data
-            ts_features = testdata['Sample'][k:k + frames_per_sample, :]
+            x = ts_features[k:k + frames_per_sample, :]
             
             # get shape of current ts_features
-            current_len_spec = ts_features.shape[0]
+            current_len_spec = x.shape[0]
             
             # Pad ts_features so that it is the full size
-            ts_features = np.pad(ts_features, ((0, (frames_per_sample-current_len_spec)), (0, 0)), 'constant', constant_values=(0))
+            x = np.pad(x, ((0, (frames_per_sample-current_len_spec)), (0, 0)), 'constant', constant_values=(0))
             
             # reshape spectrogram for neural network
-            ts_features = np.reshape(ts_features, [1, frames_per_sample, n_features])
+            x = np.reshape(x, [1, frames_per_sample, n_features])
 
         else:
             # Get data
-            ts_features = np.reshape(testdata['Sample'][k:k + frames_per_sample, :], [1, frames_per_sample, n_features])
+            x = np.reshape(ts_features[k:k + frames_per_sample, :], [1, frames_per_sample, n_features])
                 
         # get inferred ibm using trained model
-        ibm_batch = sess.run([a], feed_dict={X: ts_features})
+        ibm_batch = sess.run([a], feed_dict={X: x})
         
         # append ibm from batch to previous ibms
         # if have come to the end of the spectrogram, only append relevant points and not padded points
         if (k + frames_per_sample > len_spec):
-            ibm.append(ibm_batch[0][0:current_len_spec,:])
+            ibm_list.append(ibm_batch[0][0:current_len_spec,:])
         else:
-            ibm.append(ibm_batch[0])
+            ibm_list.append(ibm_batch[0])
         
         #increment k to look at next n time points
         k = k + frames_per_sample
@@ -396,12 +379,21 @@ with tf.Session() as sess:
 
  
 #Convert list to array       
-ibm = np.concatenate([item for item in ibm], axis=0)
+ibm_array = np.concatenate([item for item in ibm_list], axis=0)
 
 #Round each point to 0 or 1
-ibm = (np.round(ibm, 0)).astype(int)
+ibm_array = (np.round(ibm_array, 0)).astype(int)
+
+#Add extra points to IBM where VAD is 0
+#Get index of all time points that have 0 activity
+vad = np.where(testdata['VAD'] == False)[0]
+#take index away from index points
+vad1 = np.subtract(vad, np.asarray(range(vad.shape[0])))
+#Use insert to insert extra columns into ibm where VAD is 0
+ibm = np.insert(ibm_array, vad1, 0, axis=0)
+
         
-del k, n_features, len_spec, current_len_spec
+del k, n_features, len_spec, current_len_spec, ibm_array, ibm_list
 
 #%% Show original mixture spectrogram and mask
 
