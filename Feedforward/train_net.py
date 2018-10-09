@@ -14,6 +14,8 @@ from os import chdir, getcwd
 wd=getcwd()
 chdir(wd)
 
+del wd
+
 #%%
 
 #Import DataGenerator2 class in Datagenerator folder
@@ -181,6 +183,7 @@ del i, loss1, accuracy1, intermediate_accuracy, intermediate_loss, epoch
 del foldername, model_checkpoint
 del save_path, learning_rate, n_classes, n_features, n_neurons_in_h1, n_neurons_in_h2
 del Y_labels, data, tr_features
+del total_batches, merged_summary, batch_size
 
 #%% Plot training accuracy and loss
 import matplotlib.pyplot as plt
@@ -209,7 +212,7 @@ plt.close(fig)
 
 #%%
 
-del training_epochs, accuracy_results, loss_results
+del training_epochs, accuracy_results, loss_results 
 
 #%% Test network with unseen data
 
@@ -250,7 +253,7 @@ wav_recovered = data_generator.istft(testspectrogram1, sampling_rate, frame_size
 wav_recovered = wav_recovered * 5
 
 #See wav file
-plt.figure(1)
+fig = plt.figure() 
 
 #sub plot 1 - Original signal
 ax1 = plt.subplot(211)
@@ -265,6 +268,7 @@ plt.xlabel('time')
 plt.title('recovered signal')
 
 plt.show() 
+plt.close(fig)
 
 #%% remove unused variables
 
@@ -273,7 +277,7 @@ del testspectrogram1, wav_recovered
 #%% Create ibm from model
 
 #Data for model
-ts_features = testdata['Sample']
+ts_features = testdata['Sample'][testdata['VAD']]
   
 #Previously saved model 
 model_checkpoint = "./model.chkpt"
@@ -290,23 +294,47 @@ with tf.Session() as sess:
     # get inferred ibm using trained model
     ibm_batch = sess.run([a], feed_dict={X: ts_features})
         
-    #append ibm from batch to previous ibms
-    #ibm.append(ibm_batch[0])
  
 #Convert list to array       
-ibm = np.concatenate([item for item in ibm_batch], axis=0)
+ibm_array = np.concatenate([item for item in ibm_batch], axis=0)
 
 #Round each point to 0 or 1
-ibm = (np.round(ibm, 0)).astype(int)
+ibm_array = (np.round(ibm_array, 0)).astype(int)
 
+#Add extra points to IBM where VAD is 0
+vad = np.where(testdata['VAD'] == False)[0]
+vad1 = np.subtract(vad, np.asarray(range(vad.shape[0])))
+ibm = np.insert(ibm_array, vad1, 0, axis=0)
+
+
+#del ibm_array, vad, vad1
 
 #%% Show mask
 
-plt.figure() 
+fig = plt.figure() 
 plt.imshow(ibm.transpose(), cmap='Greys', interpolation='none')
 
+plt.tight_layout()
+fig.savefig("feedforwardibm2.png", bbox_inches="tight")
 plt.show()
+plt.close(fig)
 
+#%% Show VAD mask
+
+vad = np.tile(testdata['VAD'], (129, 1))
+
+fig = plt.figure() 
+
+plt.imshow(vad, cmap='Greys', interpolation='none', extent=[0,(209/129),129,0], aspect="auto")
+plt.xlabel('Time [sec]')
+plt.title('VAD matrix')
+
+plt.tight_layout()
+fig.savefig("feedforwardVAD.png", bbox_inches="tight")
+plt.show()
+plt.close(fig)
+
+del vad
 
 #%% Show original mixture spectrogram and mask
 
@@ -332,7 +360,12 @@ plt.close(fig)
 #%% apply ibm to signal and convert back into time domain
 
 #Convert spectrogram from log to normal
-split_spectrogram = np.power(10, ts_features)
+split_spectrogram1 = np.power(10, ts_features)
+
+#Add extra points to IBM whre VAD is 0
+vad = np.where(testdata['VAD'] == False)[0]
+vad1 = np.subtract(vad, np.asarray(range(vad.shape[0])))
+split_spectrogram = np.insert(split_spectrogram1, vad1, 0, axis=0)
 
 #Apply ibm to spectrogram
 split_spectrogram1 = np.multiply(split_spectrogram, ibm)
@@ -345,6 +378,8 @@ wav_recovered = data_generator.istft(split_spectrogram1, sampling_rate, frame_si
    
 #Amplify wav file
 wav_recovered = np.float32(wav_recovered * 5)
+
+del split_spectrogram1, vad, vad1
 
 #%% plot signal 
 
