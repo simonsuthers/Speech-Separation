@@ -106,4 +106,11 @@ As with the other networks, after applying the IBM, the original sound wave look
 ### none
 Not implemented yet
 
+![Alt text](Pictures/deep_clustering.png?raw=true "Deep clustering flow")
+
+![Alt text](Deep-clustering/deepclustering_embeddings.png?raw=true "Deep clustering embeddings")
+
+![Alt text](Deep-clustering/deepclustering_separation.png?raw=true "Deep clustering separation")
+
+
 
