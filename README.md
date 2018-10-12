@@ -110,18 +110,23 @@ The full deep-clustering model in simplemented in the **Deep-clustering** folder
 ![Alt text](Pictures/deep_clustering.png?raw=true "Deep clustering flow")
 
 The bi-directional LSTM model created before creates embeddings. Test signals are then fed into these embeddings. An example of the embeddings from a test signal is shown below:
+
 ![Alt text](Deep-clustering/deepclustering_embeddings.png?raw=true "Deep clustering embeddings")
 
 K-means clustering is then applied to the embeddings to assign each embedding a speaker:
+
 ![Alt text](Deep-clustering/deepclustering_separation.png?raw=true "Deep clustering separation")
 
-The loss function is designed to move embeddings from different sources further apaert and embeddings from the same source closer together:.
+The loss function is designed to move embeddings from different sources further apaert and embeddings from the same source closer together:
+
 ![Alt text](Deep-clustering/deepclusteringloss.png?raw=true "Deep clustering loss function")
 
 The same test signal containing mixture of 2 voices as before was fed into the network. Clustering was performed on the results and the following IBM was produced:
+
 ![Alt text](Deep-clustering/deep_clustering_ibm.png?raw=true "Deep clustering IBM")
 
 Below is the output of the binary mask. If enough data is fed into the network, some separation is audible (honest!):
+
 ![Alt text](Deep-clustering/deep_clustering_recoveredwav.png?raw=true "Deep clustering recovered sound wave")
 
 
