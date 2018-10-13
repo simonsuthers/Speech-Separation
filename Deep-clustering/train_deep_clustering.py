@@ -53,6 +53,23 @@ n_classes = np.shape(Y_labels)[1]
 
 del data, tr_features, Y_labels
 
+#%% Get testing set
+
+#list of training data files   
+validation_list = ['../Data/test' + str(i) + '.pkl' for i in range(1, 2)]
+
+# generator for training set and validation set
+validation_data_generator = DataGenerator2(validation_list)
+
+#Get total number of batches
+validation_batches = int(validation_data_generator.total_batches(batch_size))
+
+#Print message to give data about how many batches are in the data
+print("Training set: Data samples: %d, Total number of points: %d"%(validation_data_generator.total_samples, validation_data_generator.total_number_of_datapoints()))
+
+#Remove unwanted variables
+del validation_list
+
 #%% Reset default graph
 
 tf.reset_default_graph()
@@ -60,7 +77,7 @@ tf.reset_default_graph()
 #%% Set training parameters
 #https://stats.stackexchange.com/questions/330176/what-is-the-output-of-a-tf-nn-dynamic-rnn
 
-training_epochs = 100
+training_epochs = 50
 n_neurons_in_h1 = 300
 n_neurons_in_h2 = 300
 learning_rate = 0.01
@@ -168,13 +185,6 @@ optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2
 gradients_and_vars = optimizer.compute_gradients(loss_batch)
 train_step = optimizer.apply_gradients(gradients_and_vars)
 
-#%% Accuracy calculation
-
-#Get prediction from output
-#correct_prediction = tf.equal(tf.round(a), Y2_v1)
-#Accuracy determination
-#accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32), name="Accuracy")
-accuracy = loss_batch
 
 #%% Run model
 
@@ -193,10 +203,6 @@ model_checkpoint = "./model.chkpt"
 # Create a saver so we can save and load the model as we train it
 tf_saver = tf.train.Saver()
 
-# Start timer
-start = time.time()
-
-
 initial = tf.global_variables_initializer()
 
 #create session
@@ -205,10 +211,17 @@ with tf.Session() as sess:
     writer = tf.summary.FileWriter(foldername)
     writer.add_graph(sess.graph)
     merged_summary = tf.summary.merge_all()
-    accuracy_results = []
+    #Array for storing validation loss
+    validation_loss_results= []
+    #Arrays for storing training loss
     loss_results = []
     
+    
     for epoch in range(training_epochs):
+        
+        # Start timer
+        start = time.time()
+        
         #create array to hold intermediate results for accuracy and loss
         intermediate_accuracy = []
         intermediate_loss = []
@@ -225,35 +238,68 @@ with tf.Session() as sess:
             # concatenate labels together to get (64, 100, 129) array
             Y_labels = (np.concatenate([np.asarray(item['Target']) for item in data])).astype('int')
             
-            _, loss1, accuracy1  = sess.run([train_step, loss_batch, accuracy], feed_dict={X: tr_features, Y:Y_labels})
-            #Add loss and accuracy to intermediate array
+            _, loss1  = sess.run([train_step, loss_batch], feed_dict={X: tr_features, Y:Y_labels})
+            #Add loss to intermediate array
             intermediate_loss.append(loss1)
-            intermediate_accuracy.append(accuracy1)
             
-        #Append mean of loss and accuracy over batch to accuracy_loss results
-        accuracy_results.append(np.mean(intermediate_accuracy))
-        loss_results.append(np.mean(intermediate_loss))
-
-        #Get prediction of validation data after each epoch
+        #Save model after every 50 epochs
+        if epoch % 50 == 0:
+            save_path = tf_saver.save(sess, model_checkpoint)
             
-        #y_pred = sess.run(tf.argmax(a,1), feed_dict={X: ts_features})
-        #y_true = sess.run(tf.argmax(ts_labels, 1))
-        #summary, acc = sess.run([merged_summary, accuracy], feed_dict={X: ts_features, Y: ts_labels})
+        #Do validation after every 10 epochs
+        if epoch % 2 == 0:
+            
+            validation_intermediate_loss = []
+            
+            #loop through each batch in the dataset
+            for i in range(0, validation_batches):
+                
+                # Get data
+                validation_data = validation_data_generator.gen_batch(batch_size);
+                # Reshape training data
+                # concatenate training samples together to get (64, 100, 129) array
+                ts_features = np.concatenate([np.reshape(item['Sample'], [1, frames_per_sample, n_features]) for item in validation_data])
+                
+                # concatenate labels together to get (64, 100, 129) array
+                ts_labels = (np.concatenate([np.asarray(item['Target']) for item in validation_data])).astype('int')
+                
+                validation_loss  = sess.run([loss_batch], feed_dict={X: ts_features, Y:ts_labels})
+                #Add loss to intermediate array
+                validation_intermediate_loss.append(validation_loss)
+            
+            #Append mean of loss  over batch to accuracy_loss results
+            validation_loss_results.append([epoch, np.mean(intermediate_loss)])
+            
+        # finish timer 
+        end = time.time()
         
-        #writer.add_summary(summary, epoch)
-        print("epoch", epoch)
+        #Append mean of loss  over batch to accuracy_loss results
+        loss_results.append([epoch ,np.mean(intermediate_loss), end - start])
+        
+        print("epoch %d, time elapsed: %f"%(epoch,(end - start)))
+     
+    #Save model after final epochs
     save_path = tf_saver.save(sess, model_checkpoint)
-    
-# finish timer and display how long it took to build model in seconds
-end = time.time()
-print("Time elapsed (secs): %f"%(end - start))
+
+#Convert results to arrays
+loss_results = np.asarray(loss_results)
+validation_loss_results = np.asarray(validation_loss_results)            
+            
+print("Time elapsed (secs): %f"%(sum(loss_results[:,2])))
+
+#Save results to csv
+#Save training loss
+np.savetxt("loss_results.csv", loss_results, delimiter=",")
+
+#Save validation loss
+np.savetxt("loss_validation_results.csv", validation_loss_results, delimiter=",")
 
 del start, end
 
 
 #%% remove variables
     
-del i, loss1, accuracy1, intermediate_accuracy, intermediate_loss, epoch
+del i, loss1, intermediate_accuracy, intermediate_loss, epoch
 del foldername, model_checkpoint
 del save_path, learning_rate, batch_size, n_classes, n_features, n_neurons_in_h1, n_neurons_in_h2
 del Y_labels, data, tr_features
@@ -266,28 +312,29 @@ import matplotlib.pyplot as plt
 
 fig = plt.figure() 
 
-#sub plot 1 - Accuracy
+#sub plot 1 - Loss
 ax1 = plt.subplot(211)
-plt.plot(range(training_epochs), accuracy_results, linewidth=2.0)
+plt.plot(range(training_epochs), loss_results[:,1], linewidth=2.0)
 plt.xlabel('epoch')
-plt.ylabel('training accuracy')
-plt.title('accuracy')
+plt.ylabel('loss')
+plt.title('training loss')
+
 
 #sub plot 2 - Loss
-ax2 = plt.subplot(212, sharex=ax1)
-plt.plot(range(training_epochs), loss_results, linewidth=2.0)
+ax2 = plt.subplot(212)
+plt.plot(range(len(validation_loss_results)), validation_loss_results[:,1], linewidth=2.0)
 plt.xlabel('epoch')
-plt.ylabel('training loss')
-plt.title('loss')
+plt.ylabel('loss')
+plt.title('validation loss')
 
 plt.tight_layout()
-fig.savefig("bidilossaccuracy.png", bbox_inches="tight")
+fig.savefig("deepclusteringloss.png", bbox_inches="tight")
 plt.show()
 plt.close(fig)  
 
 #%%
 
-del training_epochs, accuracy_results, loss_results
+del training_epochs, loss_results, validation_loss_results
 
 #%% Test network with unseen data
 
@@ -336,6 +383,7 @@ with tf.Session() as sess:
     
     #restore session from checkpoint
     saver.restore(sess, model_checkpoint)
+    
         
     #get length of spectrogram for mixture signal
     len_spec = ts_features.shape[0]
@@ -377,21 +425,28 @@ with tf.Session() as sess:
 
 
 # Convert list to array   
-# this returns a 1 dimensional aarray of 1x21801
-embeddings_list = np.squeeze(np.concatenate([item for item in embeddings], axis=1), axis=2)
+# this returns a 1 dimensional aarray of 1x21801       
+embeddings_list = np.squeeze(np.concatenate([item for item in embeddings], axis=1), axis=0)
 
 del k, current_len_spec
 
 #%% Visualize the embeddings
 
-fig = plt.figure() 
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+#ax = Axes3D(fig)
 
 #Plot embeddings
-plt.scatter(x=embeddings_list[0], y=np.ones(embeddings_list.shape[1]), alpha=0.5)
-plt.xlabel('dimension 1')
-plt.ylabel('dimension 2')
-plt.title('Embeddings')
-plt.show()
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(embeddings_list[:,0], embeddings_list[:,1], embeddings_list[:,2], c = 'b', marker='o', alpha=0.5)
+
+
+ax.set_xlabel('Embedding 1')
+ax.set_ylabel('Embedding 2')
+ax.set_zlabel('Embedding 3')
+ax.set_title('Embeddings')
+
 
 fig.savefig("deepclustering_embeddings.png", bbox_inches="tight")
 plt.show()
@@ -404,23 +459,34 @@ plt.close(fig)
 from sklearn.cluster import KMeans
 
 # Apply k-means to test signal
-kmean = KMeans(n_clusters=2, random_state=0).fit(embeddings_list.reshape(-1,1))
+kmean = KMeans(n_clusters=2, random_state=0).fit(embeddings_list)
 
 #%% Plot k-means
 
-fig = plt.figure() 
+#Get 2 series from embeddings
+x1 = embeddings_list[kmean.labels_==0,:]
+x2 = embeddings_list[kmean.labels_==1,:]
 
 #Plot embeddings
-plt.scatter(x=embeddings_list[0], y=np.ones(embeddings_list.shape[1]), alpha=0.5, c=kmean.labels_)
-plt.xlabel('dimension 1')
-plt.ylabel('dimension 2')
-plt.title('Embeddings')
-plt.show()
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(x1[:,0], x1[:,1], x1[:,2], c='blue', marker='o', alpha=0.5, label = 'cluster 1')
+ax.scatter(x2[:,0], x2[:,1], x2[:,2], c='red', marker='o', alpha=0.5, label = 'cluster 2')
+
+ax.set_xlabel('Embedding 1')
+ax.set_ylabel('Embedding 2')
+ax.set_zlabel('Embedding 3')
+ax.set_title('Embeddings')
+#ax.legend(['Cluster 1', 'Cluster 2'])
+#ax.legend(['label1', 'label2'], numpoints = 2)
+ax.legend()
 
 fig.savefig("deepclustering_separation.png", bbox_inches="tight")
 plt.show()
-plt.close(fig)  
+plt.close(fig) 
 
+
+del x1, x2
 
 #%% create ibm mask
 
@@ -450,7 +516,7 @@ ax2.imshow(ibm, cmap='Greys', interpolation='none', extent=[0,(209/129),129,0], 
 ax2.set(title='IBM', xlabel='Time [sec]')
 
 plt.tight_layout()
-fig.savefig("bidilossibm.png", bbox_inches="tight")
+fig.savefig("deep_clustering_ibm.png", bbox_inches="tight")
 plt.show()
 plt.close(fig)
 
@@ -489,8 +555,36 @@ plt.title('Separated signal')
 
 #Save figure
 plt.tight_layout()
-fig.savefig("bidilossrecoveredwav.png", bbox_inches="tight")
+fig.savefig("deep_clustering_recoveredwav.png", bbox_inches="tight")
 plt.show()
+plt.close(fig)
+
+#%% Calculate signal to distortion ratio
+import math
+
+Signal1 = testdata['Signal1']
+Signal2 = testdata['Signal2']
+MixtureSignal = testdata['MixtureSignal']
+
+top1 = (1 / Signal1.shape[0]) * np.sum(np.power(Signal1, 2))
+top2 = (1 / Signal2.shape[0]) * np.sum(np.power(Signal2, 2))
+bottom = (1 / MixtureSignal.shape[0]) * np.sum(np.power(MixtureSignal, 2))
+
+SND1 = 10 * math.log10(top1/bottom)
+SND2 = 10 * math.log10(top2/bottom)
+
+objects = ('Signal 1', 'Signal 2')
+y_pos = np.arange(len(objects))
+
+fig = plt.figure() 
+
+plt.bar(y_pos, [SND1, SND2], align='center', alpha=0.5)
+plt.xticks(y_pos, objects)
+plt.ylabel('Signal to distortion')
+plt.title('Signal performance')
+ 
+plt.show()
+
 plt.close(fig)
 
 
