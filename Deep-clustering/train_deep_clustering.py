@@ -1,5 +1,5 @@
 '''
-Script to train bi-directional RNN model with deep clustering loss function
+Script to train deep clustering model
 '''
 
 
@@ -42,9 +42,9 @@ total_number_of_datapoints = data_generator.total_number_of_datapoints()
 data = data_generator.gen_batch(batch_size);
 # Reshape training data
 # concatenate training samples together to get 101900 x 129 array
-tr_features = np.concatenate([item['Sample'] for item in data], axis=0)
+tr_features = np.concatenate([item['SampleStd'] for item in data], axis=0)
 # concatenate labels together to get 6400 x 129 array
-Y_labels = (np.concatenate([np.asarray(item['Target'])[:,:,0] for item in data], axis=0)).astype(int)
+Y_labels = (np.concatenate([np.asarray(item['IBM'])[:,:,0] for item in data], axis=0)).astype(int)
 
 #Same as neff
 n_features = np.shape(tr_features)[1]
@@ -233,10 +233,10 @@ with tf.Session() as sess:
             data = data_generator.gen_batch(batch_size);
             # Reshape training data
             # concatenate training samples together to get (64, 100, 129) array
-            tr_features = np.concatenate([np.reshape(item['Sample'], [1, frames_per_sample, n_features]) for item in data])
+            tr_features = np.concatenate([np.reshape(item['SampleStd'], [1, frames_per_sample, n_features]) for item in data])
             
             # concatenate labels together to get (64, 100, 129) array
-            Y_labels = (np.concatenate([np.asarray(item['Target']) for item in data])).astype('int')
+            Y_labels = (np.concatenate([np.asarray(item['IBM']) for item in data])).astype('int')
             
             _, loss1  = sess.run([train_step, loss_batch], feed_dict={X: tr_features, Y:Y_labels})
             #Add loss to intermediate array
@@ -258,10 +258,10 @@ with tf.Session() as sess:
                 validation_data = validation_data_generator.gen_batch(batch_size);
                 # Reshape training data
                 # concatenate training samples together to get (64, 100, 129) array
-                ts_features = np.concatenate([np.reshape(item['Sample'], [1, frames_per_sample, n_features]) for item in validation_data])
+                ts_features = np.concatenate([np.reshape(item['SampleStd'], [1, frames_per_sample, n_features]) for item in validation_data])
                 
                 # concatenate labels together to get (64, 100, 129) array
-                ts_labels = (np.concatenate([np.asarray(item['Target']) for item in validation_data])).astype('int')
+                ts_labels = (np.concatenate([np.asarray(item['IBM']) for item in validation_data])).astype('int')
                 
                 validation_loss  = sess.run([loss_batch], feed_dict={X: ts_features, Y:ts_labels})
                 #Add loss to intermediate array
@@ -365,7 +365,7 @@ testdata = data_generator.CreateTrainingDataSpectrogram(wavfile1, wavfile2, samp
 #%% Get embeddings for test signal from model
 
 # Get only active test features
-ts_features = testdata['Sample'][testdata['VAD']]
+ts_features = testdata['SampleStd'][testdata['VAD']]
 
 #Get number of features variable
 n_features = np.shape(ts_features)[1]
@@ -523,33 +523,46 @@ plt.close(fig)
 #%% apply ibm to signal and convert back into time domain
 
 #Convert spectrogram from log to normal
-split_spectrogram = np.power(10, testdata['Sample'])
+split_spectrogram = np.power(10, (testdata['SampleStd'] * data_generator.std) + data_generator.mean)
+
+
 
 #Apply ibm to spectrogram
 split_spectrogram1 = np.multiply(split_spectrogram, np.transpose(ibm))
+split_spectrogram2 = np.multiply(split_spectrogram, np.transpose((np.invert(ibm.astype(bool))).astype(int)))
 
 # create instance of class
 data_generator = DataGenerator() 
 
 #Get recovered mixture from istft routine
-wav_recovered = data_generator.istft(split_spectrogram1, sampling_rate, frame_size)
+wav_recovered1 = data_generator.istft(split_spectrogram1, sampling_rate, frame_size)
+wav_recovered2 = data_generator.istft(split_spectrogram2, sampling_rate, frame_size)
    
 #Amplify wav file
-wav_recovered = np.float32(wav_recovered * 5)
+wav_recovered1 = np.float32(wav_recovered1 * 5)
+wav_recovered2 = np.float32(wav_recovered2 * 5)
+
+del split_spectrogram1
 
 #%% plot signal 
 
 fig = plt.figure() 
 
 #sub plot 1 - Original signal
-ax1 = plt.subplot(211)
+ax1 = plt.subplot(311)
 plt.plot(testdata['MixtureSignal'])
 plt.xlabel('time')
 plt.title('Mixture signal')
 
 #sub plot 2 - Separated signal
-ax2 = plt.subplot(212, sharex=ax1)
-plt.plot(wav_recovered)
+ax2 = plt.subplot(312, sharex=ax1)
+plt.plot(wav_recovered1)
+plt.xlabel('time')
+plt.title('Separated signal')
+
+#sub plot 2 - Separated signal
+ax3 = plt.subplot(313, sharex=ax1)
+plt.plot(wav_recovered2)
 plt.xlabel('time')
 plt.title('Separated signal')
 
@@ -594,10 +607,19 @@ import winsound
 import librosa
 
 #Save combined series to wav file
-librosa.output.write_wav('separated_signal_rnn.wav', wav_recovered, sr=sampling_rate)
+librosa.output.write_wav('separated_signal_deepclustering1.wav', wav_recovered1, sr=sampling_rate)
 
 #play sound recovered
-winsound.PlaySound('separated_signal_rnn.wav', winsound.SND_FILENAME|winsound.SND_ASYNC)
+winsound.PlaySound('separated_signal_deepclustering1.wav', winsound.SND_FILENAME|winsound.SND_ASYNC)
+
+#%%
+
+#Save combined series to wav file
+librosa.output.write_wav('separated_signal_deepclustering2.wav', wav_recovered2, sr=sampling_rate)
+
+#play sound recovered
+winsound.PlaySound('separated_signal_deepclustering2.wav', winsound.SND_FILENAME|winsound.SND_ASYNC)
+
 
 
 
