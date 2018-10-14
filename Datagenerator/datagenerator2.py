@@ -20,6 +20,10 @@ class DataGenerator2(object):
         self.ind = 0  # index of current reading position
         self.samples = []
         self.epoch = 0
+        #Global mean and standard deviation (obtained from Get-mean-and-std.py script)
+        self.mean = -3.7185277644387273
+        self.std = 0.7873899776985277
+        
         
         # read in all the .pkl files
         for pkl in pkl_list:
@@ -57,7 +61,7 @@ class DataGenerator2(object):
     
     #method for the total number of datapoints
     def total_number_of_datapoints(self):
-        return sum([item['Sample'].shape[0] for item in self.samples])
+        return sum([item['SampleStd'].shape[0] for item in self.samples])
     
     
     def restart_batch(self):

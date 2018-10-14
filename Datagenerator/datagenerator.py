@@ -17,9 +17,9 @@ class DataGenerator(object):
     def __init__(self):
         '''class to combine wav files, create spectrogram of wav files and save
         combination of files as pickle files'''
-        #self.ind = 0  # index of current reading position
-        #self.samples = []
-        #self.epoch = 0
+        #set global mean and std (obtained from Get-mean-and-std.py script)
+        self.mean = -3.7185277644387273
+        self.std = 0.7873899776985277
         
 
     #Create method to apply a stft to a sound array
@@ -75,8 +75,8 @@ class DataGenerator(object):
                     
         return n_speaker, speaker_file
     
-    #Function to join 2 wav files together and create single dictionary of {ID, wavfile1, wavfile2, samples, VAD, Target}
-    def CreateTrainingDataSpectrogram(self, wavfile1, wavfile2, sampling_rate, frame_size, maxFFTSize, vad_threshold):
+    #Function to return wav files
+    def GetSeperateSignals(self, wavfile1, wavfile2, sampling_rate):
         #load first speaker
         speech_1, _ = librosa.core.load(wavfile1, sr=sampling_rate)
         #load second speaker
@@ -89,6 +89,16 @@ class DataGenerator(object):
         speech_1 = speech_1[:length]
         speech_2 = speech_2[:length]
         speech_mix = speech_1 + speech_2
+        
+        return speech_1, speech_2, speech_mix
+        
+        
+    
+    #Function to join 2 wav files together and create single dictionary of {ID, wavfile1, wavfile2, samples, VAD, Target}
+    def CreateTrainingDataSpectrogram(self, wavfile1, wavfile2, sampling_rate, frame_size, maxFFTSize, vad_threshold):
+        
+        #Get separate and mixed speech signals
+        speech_1, speech_2, speech_mix = self.GetSeperateSignals(wavfile1, wavfile2, sampling_rate)
         
         # compute stft spectrum for 1st speaker
         speech_1_spec, _, _ = self.stft(speech_1, sampling_rate, frame_size)
@@ -103,8 +113,12 @@ class DataGenerator(object):
         speech_mix_spec1 = np.abs(speech_mix_spec0[:, :maxFFTSize])
         # Get additional frequency spectrum for mixture signal
         speech_mix_spec = np.log10(speech_mix_spec1)
+        # Standardise spectrogram by minus mean and divide by standard deviation
+        # Global mean and standard deviation are worked out in Get-mean-and-std.py script
+        speech_mix_spec_std = (speech_mix_spec - self.mean) / self.std
         #Convert speech_mix_spec to float16 to save on memory
         speech_mix_spec = speech_mix_spec.astype('float16')
+        speech_mix_spec_std = speech_mix_spec_std.astype('float16')
                
         # VAD is voice activity detection. If magnitude is greater than threshold then a voice is active.
         speech_VAD = (speech_mix_spec1.sum(axis=1) > 0.005).astype(int)
@@ -113,11 +127,19 @@ class DataGenerator(object):
         
         # Create Ideal Binary Mask
         # 2 IBMs are created. One for the first signal and one for the second signal
-        Y = np.array([speech_1_spec > speech_2_spec, speech_1_spec < speech_2_spec]).astype(bool)
+        IBM = np.array([speech_1_spec > speech_2_spec, speech_1_spec < speech_2_spec]).astype(bool)
         #Transpose IBM around so that it is 2 columns of n frequency points for each time point
-        Y1 = np.transpose(Y, [1, 2, 0])
+        IBM1 = np.transpose(IBM, [1, 2, 0])
         
-        sample_dict = {'Sample': speech_mix_spec, 'VAD': speech_VAD, 'Target': Y1, 'Wavfiles': [wavfile1, wavfile2], 'MixtureSignal': speech_mix, 'ZmixedSeries': speech_mix_spec0, 'fmixed': f1, 'tmixed': t1}
+        # Create Ideal Ratio Mask
+        # 2 IRMs are created. One for the first signal and one for the second signal
+        SNR1 = np.log10(np.divide(speech_1_spec, speech_2_spec))
+        SNR2 = np.log10(np.divide(speech_2_spec, speech_1_spec))
+        IRM = np.array([(np.power(10, SNR1) / (np.power(10, SNR1) + 1)), (np.power(10, SNR2) / (np.power(10, SNR2) + 1))]).astype('float16')
+        #Transpose IBM around so that it is 2 columns of n frequency points for each time point
+        IRM1 = np.transpose(IRM, [1, 2, 0])
+        
+        sample_dict = {'SampleStd': speech_mix_spec_std, 'SampleRaw': speech_mix_spec, 'VAD': speech_VAD, 'IBM': IBM1, 'IRM': IRM1,'Wavfiles': [wavfile1, wavfile2], 'MixtureSignal': speech_mix, 'ZmixedSeries': speech_mix_spec0, 'fmixed': f1, 'tmixed': t1, 'Signal1': speech_1, 'Signal2': speech_2, 'Spectrogram1': speech_1_spec, 'Spectrogram2':speech_2_spec }
 
         return sample_dict
     
@@ -163,11 +185,13 @@ class DataGenerator(object):
             sample = self.CreateTrainingDataSpectrogram(i, j, sampling_rate, frame_size, maxFFTSize, vad_threshold)  
             
             #reduce spectrogram to only include bins with activity greater than threshold
-            train = sample['Sample'][sample['VAD']]
-            Y = sample['Target'][sample['VAD']]
+            trainStd = sample['SampleStd'][sample['VAD']]
+            trainRaw = sample['SampleRaw'][sample['VAD']]
+            IBM = sample['IBM'][sample['VAD']]
+            IRM = sample['IRM'][sample['VAD']]
             
             #get length of spectrogram for mixture signal
-            len_spec = train.shape[0]
+            len_spec = trainStd.shape[0]
             k = 0
             vad_start = 0
     
@@ -175,8 +199,10 @@ class DataGenerator(object):
             while(k + frames_per_sample < len_spec):
                 #Get first chunk of data from spectrogram of 3 signals
                 #Chunk splits the spectrogram into a series of n (FRAMES_PER_SAMPLE) points
-                speech_mix_spec = train[k:k + frames_per_sample, :]
-                Y1 = Y[k:k + frames_per_sample, :]
+                speech_mix_spec_Std = trainStd[k:k + frames_per_sample, :]
+                speech_mix_spec_Raw = trainRaw[k:k + frames_per_sample, :]
+                IBM1 = IBM[k:k + frames_per_sample, :]
+                IRM1 = IRM[k:k + frames_per_sample, :]
                 
                 #Get VAD values for all points to k
                 vad_end = np.where(sample['VAD'] == True)[0][k + frames_per_sample]
@@ -184,7 +210,7 @@ class DataGenerator(object):
                 vad_start = vad_end
                 
                 #Create feed_dict for neural network
-                sample_dict = {'Sample': speech_mix_spec, 'VAD': speech_VAD, 'Target': Y1, 'Wavfiles': sample['Wavfiles'], 'Id':id }
+                sample_dict = {'SampleStd': speech_mix_spec_Std, 'SampleRaw': speech_mix_spec_Raw, 'VAD': speech_VAD, 'IBM': IBM1, 'IRM': IRM1, 'Wavfiles': sample['Wavfiles'], 'Id':id }
 
                 #Add sample dictionary to list of samples
                 samples.append(sample_dict)
@@ -200,7 +226,7 @@ class DataGenerator(object):
         
         
     #function to loop through all training folders and create pickle file for all folders
-    def CreatePickleForAllFolders(self, parentfolder, sampling_rate, maxFFTSize, frame_size, vad_threshold, endfolder, frames_per_sample, filefolder):
+    def CreatePickleForAllFolders(self, file, parentfolder, sampling_rate, maxFFTSize, frame_size, vad_threshold, endfolder, frames_per_sample, filefolder):
         
         training_folders = [parentfolder + '\\DR' + str(i) for i in range(1, (endfolder + 1))]
 
@@ -209,7 +235,7 @@ class DataGenerator(object):
             #Get folder name
             data_dir = i
             #Create name of file to save data to
-            filename = "%strain%s.pkl"%(filefolder, i[-1:])
+            filename = "%s%s%s.pkl"%(filefolder, file, i[-1:])
 
             #Save data to pickle file
             self.CreatePickleFiles(filename, data_dir, sampling_rate, maxFFTSize, frame_size, vad_threshold, frames_per_sample)
@@ -286,8 +312,10 @@ data_generator = DataGenerator()
 sample = data_generator.CreateTrainingDataSpectrogram(wavfile1, wavfile2, sampling_rate, frame_size, maxFFTSize, vad_threshold)   
 
 #Test converting Spectrogram back to time domain 
+#Convert from z score
+spectrogram = np.power(10, (sample['SampleStd'] * data_generator.std) + data_generator.mean)
 #Get spectrogram from testing routine
-spectrogram = np.power(10, sample['Sample'])
+#spectrogram = np.power(10, spectrogram1)
 #Get original mixture from testing routine
 wav_original = sample['MixtureSignal']
 #Get recovered mixture from istft routine
@@ -394,12 +422,45 @@ endfolder = 7
 data_generator = DataGenerator() 
 
 # Run routine to create pickle files
-#data_generator.CreatePickleForAllFolders(parentfolder, sampling_rate, maxFFTSize, frame_size, vad_threshold, endfolder, frames_per_sample, filefolder)
+#data_generator.CreatePickleForAllFolders("train", parentfolder, sampling_rate, maxFFTSize, frame_size, vad_threshold, endfolder, frames_per_sample, filefolder)
 
   
 #%% Remove variables
 
 del parentfolder, sampling_rate, maxFFTSize, frame_size, vad_threshold, data_generator, frames_per_sample, endfolder, filefolder
+
+
+#%% Create testing set
+#Use the folder DR1 to DR7 to create the training set
+
+#Sampling rate
+sampling_rate = 8000
+#Maximum number of FFT points (NEFF)
+maxFFTSize = 129
+#Size of FFT frame
+frame_size = 256
+
+#Voice activity threshold (THRESHOLD)
+#If TF bins are smaller than THRESHOLD then will be considered inactive
+vad_threshold = 40
+#Number of frames per sample for batches (this will be the nimber of rows that are fed into each batch of the rnn)
+frames_per_sample = 100
+ 
+#Set folder containing folders of wav files from TIMIT data set 
+parentfolder = "../../TIMIT_WAV/TEST" 
+
+#Set folder to save pickle files
+#Folder is current working directory
+filefolder = "../Data/"
+
+#number of folders to loop through
+endfolder = 7
+
+# create instance of class
+data_generator = DataGenerator() 
+
+# Run routine to create pickle files
+#data_generator.CreatePickleForAllFolders("test", parentfolder, sampling_rate, maxFFTSize, frame_size, vad_threshold, endfolder, frames_per_sample, filefolder)
 
 
    
