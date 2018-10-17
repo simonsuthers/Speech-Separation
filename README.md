@@ -9,6 +9,10 @@ So far, 2 networks have been built:
 
 The scripts were created using the Spyder IDE of anaconda. Before executing each script, set the console directory to the directory of the script.
 
+## Source
+
+J. R. Hershey, Z. Chen, J. Le Roux and S. Watanabe, "Deep clustering: Discriminative embeddings for segmentation and separation," 2016 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP), Shanghai, 2016, pp. 31-35
+
 ## Data Generator
 
 Within the **DataGenerator** folder are two Python scripts that create the dataset.
@@ -128,6 +132,13 @@ The same test signal containing mixture of 2 voices as before was fed into the n
 Below is the output of the binary mask. If enough data is fed into the network, some separation is audible (honest!):
 
 ![Alt text](Deep-clustering/deep_clustering_recoveredwav.png?raw=true "Deep clustering recovered sound wave")
+
+## Full deep clustering model with mean-shift clustering
+
+![Alt text](Deep-clustering-with-mean-shift-clustering/deepclustering_embeddings?raw=true "Deep clustering embeddings")
+
+![Alt text](Deep-clustering-with-mean-shift-clustering/deepclustering_separation.png?raw=true "Deep clustering separation")
+
 
 
 
