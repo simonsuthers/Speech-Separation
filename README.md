@@ -139,6 +139,8 @@ Below is the output of the binary mask. If enough data is fed into the network, 
 
 ![Alt text](Deep-clustering-with-mean-shift-clustering/deepclustering_separation.png?raw=true "Deep clustering separation")
 
+![Alt text](Pictures/snr_comparison.png?raw=true "SNR results")
+
 
 
 
