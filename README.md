@@ -135,7 +135,7 @@ Below is the output of the binary mask. If enough data is fed into the network, 
 
 ## Full deep clustering model with mean-shift clustering
 
-![Alt text](Deep-clustering-with-mean-shift-clustering/deepclustering_embeddings?raw=true "Deep clustering embeddings")
+![Alt text](Deep-clustering-with-mean-shift-clustering/deepclustering_embeddings.png?raw=true "Deep clustering embeddings")
 
 ![Alt text](Deep-clustering-with-mean-shift-clustering/deepclustering_separation.png?raw=true "Deep clustering separation")
 
