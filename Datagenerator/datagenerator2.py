@@ -21,6 +21,8 @@ class DataGenerator2(object):
         self.samples = []
         self.epoch = 0
         #Global mean and standard deviation (obtained from Get-mean-and-std.py script)
+        #self.mean = -1.623956
+        #self.std = 0.790590
         self.mean = -3.7185277644387273
         self.std = 0.7873899776985277
         
@@ -71,36 +73,32 @@ class DataGenerator2(object):
         np.random.shuffle(self.samples)
         
  
-#%% Unit test
-#Set console working directory
-            
-from os import chdir, getcwd
-wd=getcwd()
-chdir(wd)
-
 #%% test routine to see data
  
-#list of training data files  
-#pickle files should be saved in the same directory as this script
+# list of training data files  
+# pickle files should be saved in the "data" directory from the datagenerator script
 training_files = ['../Data/train' + str(i) + '.pkl' for i in range(1, 2)]
 
-#Set batch_size. This is the size of data points to be created
+# Set batch_size. This is the size of data points to be created
 batch_size = 64
 
-#Generate data
+# Generate data
 data_generator = DataGenerator2(training_files)
 
-#Generate a batch of data
+# Generate a batch of data
 data = data_generator.gen_batch(batch_size)
 
-#Sort data by id
+# Sort data by id
 data = sorted(data, key=lambda k: k['Id']) 
 
-#Get total number of data points
+# Get total number of data points
 total_points = data_generator.total_number_of_datapoints()
 
-#Get total number of samples in data set
+# Get total number of samples in data set
 total_samples = data_generator.total_samples
+
+print("total_samples: %d"%total_samples)
+print("total_points: %d"%total_points)
 
 #%%
 

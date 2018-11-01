@@ -25,8 +25,8 @@ chdir(wd)
 
 #%% Get mean and standard deviation of record set
  
-#list of training data files  
-#pickle files should be saved in the same directory as this script
+# list of training data files  
+# pickle files should be saved in the "data" directory
 training_files = ['../Data/train' + str(i) + '.pkl' for i in range(1, 8)]
 
 #Generate data
@@ -39,7 +39,7 @@ total_samples = data_generator.total_samples
 data = data_generator.gen_batch(data_generator.total_samples)
 
 #Convert data into array of samples
-data_set = np.concatenate([item['SampleStd'] for item in data], axis=0)
+data_set = np.concatenate([item['SampleLog'] for item in data], axis=0)
 
 #Expand data type to avoid overflow error
 data_set = np.array(data_set, dtype=np.float64)
@@ -49,6 +49,10 @@ mean = np.mean(data_set)
 
 #Get Standard deviation of samples
 std = np.std(data_set)
+
+print("Mean: %f"%mean)
+print("Std: %f"%std)
+
 
 
 
