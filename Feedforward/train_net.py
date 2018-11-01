@@ -1,5 +1,5 @@
 '''
-Script to train the model
+Script to train 3 layer feed forward model
 '''
 
 #Sources:
@@ -7,34 +7,31 @@ Script to train the model
 
 import tensorflow as tf
 import numpy as np
+import time
+import matplotlib.pyplot as plt
+import librosa
 
 #%% Set console working directory
-    
-from os import chdir, getcwd
-wd=getcwd()
-chdir(wd)
-
-del wd
 
 #%%
 
-#Import DataGenerator2 class in Datagenerator folder
+# Import DataGenerator2 class in Datagenerator folder
 import sys
 sys.path.append('../Datagenerator')
 
 from datagenerator2 import DataGenerator2
 
 
-#list of training data files   
+# list of training data files   
 pkl_list = ['../Data/train' + str(i) + '.pkl' for i in range(1, 2)]
 
 # generator for training set and validation set
 data_generator = DataGenerator2(pkl_list)
 
-#Print message to give data about how many batches are in the data
+# Print message to give data about how many batches are in the data
 print("Training set: Data samples: %d, Total number of points: %d"%(data_generator.total_samples, data_generator.total_number_of_datapoints()))
 
-#remove variables
+# remove variables
 del pkl_list
 
 #%% Get data
@@ -42,21 +39,28 @@ del pkl_list
 # Get batch size
 batch_size = 64;
 
-#Get total number of batches
+# Get total number of batches
 total_batches = int(data_generator.total_batches(batch_size))
 
 # Get sample data
 data = data_generator.gen_batch(batch_size);
 # Reshape training data
 # concatenate training samples together to get 101900 x 129 array
-tr_features = np.concatenate([item['Sample'] for item in data], axis=0)
+tr_features = np.concatenate([item['SampleStd'] for item in data], axis=0)
 # concatenate labels together to get 101900 x 129 array
-Y_labels = (np.concatenate([np.asarray(item['Target'])[:,:,0] for item in data], axis=0)).astype(int)
+Y_labels = (np.concatenate([np.asarray(item['IBM'])[:,:,0] for item in data], axis=0)).astype(int)
 
-#Same as neff
+# Same as neff
 n_features = np.shape(tr_features)[1]
-#Same as neff
+# Same as neff
 n_classes = np.shape(Y_labels)[1]
+
+print("total_batches size: %d"%total_batches)
+print("n_features size: %d"%n_features)
+print("n_classes size: %d"%n_classes)
+print(tr_features.shape)
+print(str(Y_labels.shape))
+
 
 del data, tr_features, Y_labels
 
@@ -99,15 +103,11 @@ a = tf.nn.sigmoid((tf.matmul(y2, W0)+b0), name="activationOutputLayer")
 
 #%% Cost function
 
-#Cost function
-#cross_entropy
-#loss = tf.reduce_mean(-tf.reduce_sum(Y * tf.log(a), reduction_indices=[1]))
 #MSE
 loss = tf.losses.mean_squared_error(Y, a)
 
 #Optimizer
 train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
-#train_step = tf.train.AdadeltaOptimizer(learning_rate).minimize(loss)
 
 #%% Accuracy calculation
 
@@ -115,7 +115,6 @@ train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
 correct_prediction = tf.equal(tf.round(a), Y)
 #Accuracy determination
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32), name="Accuracy")
-
 
 #%% Run model
 
@@ -142,40 +141,42 @@ with tf.Session() as sess:
     accuracy_results = []
     loss_results = []
     
+    # Start timer
+    start = time.time()
+    
     for epoch in range(training_epochs):
-        #create array to hold intermediate results for accuracy and loss
+        # create array to hold intermediate results for accuracy and loss
         intermediate_accuracy = []
         intermediate_loss = []
          
-        #loop through each batch in the dataset
+        # loop through each batch in the dataset
         for i in range(0, total_batches):
             
             # Get data
             data = data_generator.gen_batch(batch_size);
             # Reshape training data
             # concatenate training samples together to get 101900 x 129 array
-            tr_features = np.concatenate([item['Sample'] for item in data], axis=0)
+            tr_features = np.concatenate([item['SampleStd'] for item in data], axis=0)
             # concatenate labels together to get 101900 x 129 array
-            Y_labels = (np.concatenate([np.asarray(item['Target'])[:,:,0] for item in data], axis=0)).astype(int)
+            Y_labels = (np.concatenate([np.asarray(item['IBM'])[:,:,0] for item in data], axis=0)).astype(int)
             
             _, loss1, accuracy1 = sess.run([train_step, loss, accuracy], feed_dict={X: tr_features, Y:Y_labels})
             #Add loss and accuracy to intermediate array
             intermediate_loss.append(loss1)
             intermediate_accuracy.append(accuracy1)
             
-        #Append mean of loss and accuracy over batch to accuracy_loss results
+        # Append mean of loss and accuracy over batch to accuracy_loss results
         accuracy_results.append(np.mean(intermediate_accuracy))
         loss_results.append(np.mean(intermediate_loss))
 
-        #Get prediction of validation data after each epoch
-            
-        #y_pred = sess.run(tf.argmax(a,1), feed_dict={X: ts_features})
-        #y_true = sess.run(tf.argmax(ts_labels, 1))
-        #summary, acc = sess.run([merged_summary, accuracy], feed_dict={X: ts_features, Y: ts_labels})
-        
         #writer.add_summary(summary, epoch)
         print("epoch", epoch)
     save_path = tf_saver.save(sess, model_checkpoint)
+    
+    # finish timer 
+    end = time.time()
+    
+print("Model trained. Time elapsed: %f"%(end - start))
     
 #%% remove variables
     
@@ -184,9 +185,9 @@ del foldername, model_checkpoint
 del save_path, learning_rate, n_classes, n_features, n_neurons_in_h1, n_neurons_in_h2
 del Y_labels, data, tr_features
 del total_batches, merged_summary, batch_size
+del start, end
 
 #%% Plot training accuracy and loss
-import matplotlib.pyplot as plt
 
 fig = plt.figure() 
 
@@ -222,7 +223,7 @@ del training_epochs, accuracy_results, loss_results
 import sys
 sys.path.append('../Datagenerator')
 
-from datagenerator import DataGenerator
+from datagenerator_scipy import DataGenerator
 
 wavfile1 = "../../TIMIT_WAV/Train/DR1/FCJF0/SI1027.WAV" 
 wavfile2 = "../../TIMIT_WAV/Train/DR1/MDPK0/SI552.WAV" 
@@ -231,7 +232,7 @@ sampling_rate = 8000
 frame_size = 256
 maxFFTSize = 129
 
-vad_threshold= 40
+vad_threshold= 0.001
 
 
 # create instance of class
@@ -240,44 +241,10 @@ data_generator = DataGenerator()
 #Get spectrogram of two wav files combined
 testdata = data_generator.CreateTrainingDataSpectrogram(wavfile1, wavfile2, sampling_rate, frame_size, maxFFTSize, vad_threshold)
 
-#%% As a test - convert spectrogram back into time domain
-import matplotlib.pyplot as plt
-
-#Get spectrogram from testing routine
-testspectrogram1 = np.power(10, testdata['Sample'])
-
-#Get recovered mixture from istft routine
-wav_recovered = data_generator.istft(testspectrogram1, sampling_rate, frame_size)
-   
-#Amplify wav file
-wav_recovered = wav_recovered * 5
-
-#See wav file
-fig = plt.figure() 
-
-#sub plot 1 - Original signal
-ax1 = plt.subplot(211)
-plt.plot(testdata['MixtureSignal'])
-plt.xlabel('time')
-plt.title('original signal')
-
-#sub plot 2 - Recovered signal
-ax2 = plt.subplot(212, sharex=ax1)
-plt.plot(wav_recovered)
-plt.xlabel('time')
-plt.title('recovered signal')
-
-plt.show() 
-plt.close(fig)
-
-#%% remove unused variables
-
-del testspectrogram1, wav_recovered
-
 #%% Create ibm from model
 
 #Data for model
-ts_features = testdata['Sample'][testdata['VAD']]
+ts_features = testdata['SampleStd'][testdata['VAD']]
   
 #Previously saved model 
 model_checkpoint = "./model.chkpt"
@@ -338,83 +305,93 @@ del vad
 
 #%% Show original mixture spectrogram and mask
 
+
+
 # Plot Spectrogram
 fig = plt.figure() 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10,3))
 
 
-x = np.asarray(list(range(ibm.shape[0]))).astype(np.float) / ibm.shape[1]
+ax1 = plt.subplot(1,2,1)
+plt.pcolormesh(testdata['tmixed'], testdata['fmixed'], (testdata['SampleMagRaw'].transpose()))
+plt.title='Mixture signal'
+plt.xlabel='Time [sec]'
+plt.ylabel='Frequency [Hz]'
 
-ax1.pcolormesh(testdata['tmixed'], testdata['fmixed'], (np.abs(testdata['ZmixedSeries'])).transpose())
-ax1.set(title='Mixture signal', xlabel='Time [sec]', ylabel='Frequency [Hz]')
 
+
+ax2 = plt.subplot(1,2,2)
 ax2.imshow(ibm.transpose(), cmap='Greys', interpolation='none', extent=[0,(209/129),129,0], aspect="auto")
 ax2.set(title='IBM', xlabel='Time [sec]')
+
 
 plt.tight_layout()
 fig.savefig("feedforwardibm.png", bbox_inches="tight")
 plt.show()
 plt.close(fig)
 
-
 #%% apply ibm to signal and convert back into time domain
 
-#Convert spectrogram from log to normal
-split_spectrogram1 = np.power(10, ts_features)
+# Convert spectrogram from log to normal
+split_spectrogram = np.power(10, (ts_features * data_generator.std) + data_generator.mean)
 
-#Add extra points to IBM whre VAD is 0
+# Add extra points to IBM whre VAD is 0
 vad = np.where(testdata['VAD'] == False)[0]
 vad1 = np.subtract(vad, np.asarray(range(vad.shape[0])))
-split_spectrogram = np.insert(split_spectrogram1, vad1, 0, axis=0)
+split_spectrogram = np.insert(split_spectrogram, vad1, 0, axis=0)
 
-#Apply ibm to spectrogram
+# Apply ibm to spectrogram
 split_spectrogram1 = np.multiply(split_spectrogram, ibm)
 
 # create instance of class
 data_generator = DataGenerator() 
 
-#Get recovered mixture from istft routine
+# Get recovered mixture from istft routine
 wav_recovered = data_generator.istft(split_spectrogram1, sampling_rate, frame_size)
-   
-#Amplify wav file
-wav_recovered = np.float32(wav_recovered * 5)
 
-del split_spectrogram1, vad, vad1
+# Get phase from testing routine
+phase = testdata['SamplePhaseRaw']
+   
+# Get recovered mixture from istft routine with phase 
+phase = np.multiply(phase, ibm)
+split_spectrogram2 = data_generator.stft_from_mag_and_phase(split_spectrogram1, phase)
+wav_recovered_with_phase = data_generator.istft(split_spectrogram2, sampling_rate, frame_size)  
+
+del split_spectrogram, split_spectrogram1, vad, vad1, phase
 
 #%% plot signal 
 
 fig = plt.figure() 
+fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5,7))
 
 #sub plot 1 - Original signal
-ax1 = plt.subplot(211)
-plt.plot(testdata['MixtureSignal'])
-plt.xlabel('time')
-plt.title('Mixture signal')
+ax1.plot(testdata['MixtureSignal'])
+ax1.set(title='Mixture signal', xlabel='time')
 
-#sub plot 2 - Separated signal
-ax2 = plt.subplot(212, sharex=ax1)
-plt.plot(wav_recovered)
-plt.xlabel('time')
-plt.title('Separated signal')
+#sub plot 2 - Recovered signal
+ax2.plot(wav_recovered)
+ax2.set(title='Separated signal', xlabel='time')
 
-#Save figure
+#sub plot 3 - Recovered signal (real component only)
+ax3.plot(wav_recovered_with_phase)
+ax3.set(title='Separated signal with phase', xlabel='time')
+
+# Save figure
 plt.tight_layout()
-fig.savefig("feedforwardrecoveredwav.png", bbox_inches="tight")
+#fig.savefig("feedforwardrecoveredwav.png", bbox_inches="tight")
 plt.show()
-plt.close(fig)
+plt.close(fig) 
 
-#%% write final sound file to disk and play
-import winsound
-import librosa
+
+
+
+
+#%% write final sound file to disk
 
 #Save combined series to wav file
 librosa.output.write_wav('separated_signal.wav', wav_recovered, sr=sampling_rate)
 
-#play sound recovered
-winsound.PlaySound('separated_signal.wav', winsound.SND_FILENAME|winsound.SND_ASYNC)
-
-#del filepath
-
+print("file saved")
 
 
 
